@@ -1,29 +1,51 @@
-
 import React, { useState, useEffect } from 'react';
+import { ErrorBoundary, FallbackProps, useErrorHandler } from 'react-error-boundary';
 import { PlatformSelector } from './components/PlatformSelector';
 import { InputSection } from './components/InputSection';
 import { OutputSection } from './components/OutputSection';
 import { Button } from './components/Button';
 import { PlatformId, ToneStyle, AppState, DEFAULT_SETTINGS, DEFAULT_MODEL_CONFIG, CopyData, ModelConfig, ModelProvider } from './types';
 import { generateCopy } from './services/geminiService';
-import { Moon, Sun, Sparkles, ArrowDown, Command, Layers, Settings, X, Key, Link, Box, Type, Server } from 'lucide-react';
+import { Moon, Sun, Sparkles, ArrowDown, Command, Layers, Settings, X, Key, Link, Box, Type, Server, AlertTriangle } from 'lucide-react';
 
-const App: React.FC = () => {
-  const [state, setState] = useState<AppState>({
-    selectedPlatforms: [PlatformId.XIAOHONGSHU],
-    keywords: '',
-    selectedStyle: ToneStyle.PREMIUM,
-    settings: DEFAULT_SETTINGS,
-    generatedCopies: {},
-    isGenerating: false,
-    images: [],
-    variantCount: 1,
-    modelConfig: DEFAULT_MODEL_CONFIG,
+const ErrorFallback: React.FC<FallbackProps> = ({ error, resetErrorBoundary }) => {
+  return (
+    <div role="alert" className="p-4 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
+      <div className="flex items-center gap-3">
+        <AlertTriangle size={20} />
+        <h3 className="font-bold">出错了！</h3>
+      </div>
+      <p className="mt-2 text-sm">{error.message}</p>
+      <Button onClick={resetErrorBoundary} className="mt-4 text-sm">重试</Button>
+    </div>
+  );
+};
+
+const AppContent: React.FC = () => {
+  const [state, setState] = useState<AppState>(() => {
+    const savedConfig = localStorage.getItem('modelConfig');
+    const modelConfig = savedConfig ? JSON.parse(savedConfig) : DEFAULT_MODEL_CONFIG;
+    return {
+      selectedPlatforms: [PlatformId.XIAOHONGSHU],
+      keywords: '',
+      selectedStyle: ToneStyle.PREMIUM,
+      settings: DEFAULT_SETTINGS,
+      generatedCopies: {},
+      isGenerating: false,
+      images: [],
+      variantCount: 1,
+      modelConfig,
+    };
   });
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [tempConfig, setTempConfig] = useState<ModelConfig>(DEFAULT_MODEL_CONFIG);
+  const [tempConfig, setTempConfig] = useState<ModelConfig>(state.modelConfig);
+  const handleError = useErrorHandler();
+
+  useEffect(() => {
+    localStorage.setItem('modelConfig', JSON.stringify(state.modelConfig));
+  }, [state.modelConfig]);
 
   const togglePlatform = (id: PlatformId) => {
     setState(prev => {
@@ -35,8 +57,8 @@ const App: React.FC = () => {
 
   const handleGenerate = async () => {
     if (!state.modelConfig.apiKey || state.modelConfig.apiKey.trim() === '') {
-      alert("请先点击右上角配置模型 API Key 才能生成内容。");
       setShowConfigModal(true);
+      handleError(new Error("请先点击右上角配置模型 API Key 才能生成内容。"));
       return;
     }
 
@@ -71,13 +93,10 @@ const App: React.FC = () => {
         
         setState(prev => ({ ...prev, generatedCopies: newCopies, isGenerating: false }));
       } else {
-         setState(prev => ({ ...prev, isGenerating: false }));
-         alert('生成格式异常，请重试。');
+         handleError(new Error('生成格式异常，请重试。'));
       }
     } catch (error: any) {
-      console.error(error);
-      setState(prev => ({ ...prev, isGenerating: false }));
-      alert(error.message || '生成失败，请检查配置或网络。');
+      handleError(error);
     }
   };
 
@@ -147,69 +166,69 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-12">
-        <PlatformSelector 
-          selectedPlatforms={state.selectedPlatforms} 
-          onTogglePlatform={togglePlatform} 
-        />
-        <InputSection 
-          keywords={state.keywords}
-          setKeywords={(val) => setState(prev => ({ ...prev, keywords: val }))}
-          images={state.images}
-          setImages={(val) => setState(prev => ({ ...prev, images: val }))}
-          style={state.selectedStyle}
-          setStyle={(val) => setState(prev => ({ ...prev, selectedStyle: val }))}
-          settings={state.settings}
-          setSettings={(val) => setState(prev => ({ ...prev, settings: val }))}
-        />
+          <PlatformSelector 
+            selectedPlatforms={state.selectedPlatforms} 
+            onTogglePlatform={togglePlatform} 
+          />
+          <InputSection 
+            keywords={state.keywords}
+            setKeywords={(val) => setState(prev => ({ ...prev, keywords: val }))}
+            images={state.images}
+            setImages={(val) => setState(prev => ({ ...prev, images: val }))}
+            style={state.selectedStyle}
+            setStyle={(val) => setState(prev => ({ ...prev, selectedStyle: val }))}
+            settings={state.settings}
+            setSettings={(val) => setState(prev => ({ ...prev, settings: val }))}
+          />
 
-        <div className="flex items-center justify-between mb-12 p-1">
-           <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-md border border-gray-200 dark:border-gray-800">
-                <Layers size={14} className="text-gray-500 ml-2" />
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mr-2">生成数量:</span>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4].map(num => (
-                    <button
-                      key={num}
-                      onClick={() => setState(prev => ({ ...prev, variantCount: num }))}
-                      className={`
-                        w-6 h-6 text-xs font-medium rounded-[4px] transition-all
-                        ${state.variantCount === num 
-                          ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' 
-                          : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800'}
-                      `}
-                    >
-                      {num}
-                    </button>
-                  ))}
+          <div className="flex items-center justify-between mb-12 p-1">
+             <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-md border border-gray-200 dark:border-gray-800">
+                  <Layers size={14} className="text-gray-500 ml-2" />
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mr-2">生成数量:</span>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map(num => (
+                      <button
+                        key={num}
+                        onClick={() => setState(prev => ({ ...prev, variantCount: num }))}
+                        className={`
+                          w-6 h-6 text-xs font-medium rounded-[4px] transition-all
+                          ${state.variantCount === num 
+                            ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' 
+                            : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800'}
+                        `}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-           </div>
+             </div>
 
-           <Button 
-            onClick={handleGenerate} 
-            disabled={state.isGenerating || (!state.keywords && state.images.length === 0)} 
-            isLoading={state.isGenerating}
-            className="w-48 h-12 text-base shadow-xl shadow-black/10 dark:shadow-white/5 hover:shadow-2xl hover:-translate-y-0.5 transition-all"
-          >
-            <Sparkles size={18} />
-            开始生成
-          </Button>
-        </div>
-
-        {(hasResults || state.isGenerating) && (
-           <OutputSection 
-             results={state.generatedCopies} 
-             selectedPlatforms={state.selectedPlatforms}
-           />
-        )}
-        
-        {!hasResults && !state.isGenerating && (
-          <div className="text-center py-20 opacity-30">
-             <ArrowDown size={32} className="mx-auto mb-4 animate-bounce" />
-             <p className="text-sm font-medium">填写内容并选择平台后开始生成</p>
+             <Button 
+              onClick={handleGenerate} 
+              disabled={state.isGenerating || (!state.keywords && state.images.length === 0)} 
+              isLoading={state.isGenerating}
+              className="w-48 h-12 text-base shadow-xl shadow-black/10 dark:shadow-white/5 hover:shadow-2xl hover:-translate-y-0.5 transition-all"
+            >
+              <Sparkles size={18} />
+              开始生成
+            </Button>
           </div>
-        )}
+
+          {(hasResults || state.isGenerating) && (
+             <OutputSection 
+               results={state.generatedCopies} 
+               selectedPlatforms={state.selectedPlatforms}
+             />
+          )}
+          
+          {!hasResults && !state.isGenerating && (
+            <div className="text-center py-20 opacity-30">
+               <ArrowDown size={32} className="mx-auto mb-4 animate-bounce" />
+               <p className="text-sm font-medium">填写内容并选择平台后开始生成</p>
+            </div>
+          )}
       </main>
 
       {/* Model Config Modal */}
@@ -334,5 +353,13 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+const App: React.FC = () => (
+  <ErrorBoundary FallbackComponent={ErrorFallback} onReset={() => {
+    // Here you could reset app state if needed, e.g., by clearing caches or resetting state
+  }}>
+    <AppContent />
+  </ErrorBoundary>
+);
 
 export default App;
