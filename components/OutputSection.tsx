@@ -29,11 +29,29 @@ export const OutputSection: React.FC<OutputSectionProps> = ({ results, selectedP
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const handleCopyAll = () => {
+    const allContent = selectedPlatforms.flatMap(pid => {
+      const platformData = results[pid];
+      if (!platformData) return [];
+      
+      const config = PLATFORM_CONFIG[pid];
+      const platformName = config.label;
+
+      return platformData.map((data, index) => 
+        `平台: ${platformName}\n方案 ${index + 1}:\n${data.content}\n标签: ${data.tags.map(t => `#${t}`).join(' ')}`
+      );
+    }).join('\n\n---\n\n');
+
+    navigator.clipboard.writeText(allContent);
+    setCopied('all');
+    setTimeout(() => setCopied(null), 2000);
+  };
+
   const renderCopyCard = (data: CopyData, index: number) => (
     <div key={data.id} className="flex flex-col bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 transition-all duration-300 hover:border-gray-300 dark:hover:border-gray-700">
       <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
         <div className="flex items-center gap-3">
-           <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm bg-black text-white dark:bg-white dark:text-black">
+           <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm bg-brand text-white">
              方案 {index + 1}
            </span>
            {data.analysis && (
@@ -45,7 +63,7 @@ export const OutputSection: React.FC<OutputSectionProps> = ({ results, selectedP
         </div>
         <div className="flex items-center gap-2">
            <button 
-            onClick={() => handleCopy(data.content, data.id)}
+            onClick={() => handleCopy(`${data.content}\n\n${data.tags.map(t => `#${t}`).join(' ')}`, data.id)}
             className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             {copied === data.id ? <Check size={14} /> : <Copy size={14} />}
@@ -58,7 +76,7 @@ export const OutputSection: React.FC<OutputSectionProps> = ({ results, selectedP
           p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
           ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-4 space-y-1" {...props} />,
           ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-4 space-y-1" {...props} />,
-          strong: ({node, ...props}) => <strong className="font-semibold text-black dark:text-white" {...props} />,
+          strong: ({node, ...props}) => <strong className="font-semibold text-brand" {...props} />,
         }}>
           {data.content}
         </ReactMarkdown>
@@ -92,18 +110,27 @@ export const OutputSection: React.FC<OutputSectionProps> = ({ results, selectedP
                 onClick={() => setActiveTab(pid)}
                 className={`
                   relative flex items-center gap-2 px-6 py-3 text-sm font-medium transition-all shrink-0
-                  ${isActive ? 'text-black dark:text-white' : 'text-gray-400 hover:text-gray-600'}
+                  ${isActive ? 'text-brand' : 'text-gray-400 hover:text-gray-600'}
                 `}
               >
-                <Icon size={16} className={isActive ? 'text-black dark:text-white' : 'text-gray-400'} />
+                <Icon size={16} className={isActive ? 'text-brand' : 'text-gray-400'} />
                 {config.label}
                 {!hasResult && <span className="w-1.5 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800 ml-1" />}
                 {isActive && (
-                  <span className="absolute bottom-0 left-0 w-full h-0.5 bg-black dark:bg-white" />
+                  <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand" />
                 )}
               </button>
             );
           })}
+        <div className="ml-auto flex items-center pr-4">
+          <button 
+            onClick={handleCopyAll}
+            className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-brand dark:hover:text-brand transition-colors px-3 py-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/50"
+          >
+            {copied === 'all' ? <Check size={14} /> : <Copy size={14} />}
+            {copied === 'all' ? '全部已复制' : '一键复制所有'}
+          </button>
+        </div>
        </div>
 
        {/* Content Area */}

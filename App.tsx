@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ErrorBoundary, FallbackProps, useErrorHandler } from 'react-error-boundary';
+import { ErrorBoundary, FallbackProps, useErrorBoundary } from 'react-error-boundary';
 import { PlatformSelector } from './components/PlatformSelector';
 import { InputSection } from './components/InputSection';
 import { OutputSection } from './components/OutputSection';
@@ -41,7 +41,7 @@ const AppContent: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [tempConfig, setTempConfig] = useState<ModelConfig>(state.modelConfig);
-  const handleError = useErrorHandler();
+  const { showBoundary } = useErrorBoundary();
 
   useEffect(() => {
     localStorage.setItem('modelConfig', JSON.stringify(state.modelConfig));
@@ -58,14 +58,14 @@ const AppContent: React.FC = () => {
   const handleGenerate = async () => {
     if (!state.modelConfig.apiKey || state.modelConfig.apiKey.trim() === '') {
       setShowConfigModal(true);
-      handleError(new Error("请先点击右上角配置模型 API Key 才能生成内容。"));
+      showBoundary(new Error("请先点击右上角配置模型 API Key 才能生成内容。"));
       return;
     }
 
     if (!state.keywords.trim() && state.images.length === 0) return;
-    
+
     setState(prev => ({ ...prev, isGenerating: true, generatedCopies: {} }));
-    
+
     try {
       const result = await generateCopy(
         state.selectedPlatforms,
@@ -79,7 +79,7 @@ const AppContent: React.FC = () => {
 
       if (result && result.results) {
         const newCopies: Partial<Record<PlatformId, CopyData[]>> = {};
-        
+
         result.results.forEach((res: any) => {
           const pid = res.platformId as PlatformId;
           newCopies[pid] = res.versions.map((version: any, index: number) => ({
@@ -90,13 +90,13 @@ const AppContent: React.FC = () => {
             analysis: { predictedEngagement: version.engagementScore }
           }));
         });
-        
+
         setState(prev => ({ ...prev, generatedCopies: newCopies, isGenerating: false }));
       } else {
-         handleError(new Error('生成格式异常，请重试。'));
+        showBoundary(new Error('生成格式异常，请重试。'));
       }
     } catch (error: any) {
-      handleError(error);
+      showBoundary(error);
     }
   };
 
@@ -106,10 +106,10 @@ const AppContent: React.FC = () => {
   };
 
   useEffect(() => {
-     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-       setIsDarkMode(true);
-       document.documentElement.classList.add('dark');
-     }
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
   }, []);
 
   useEffect(() => {
@@ -132,28 +132,26 @@ const AppContent: React.FC = () => {
   const isConfigured = !!state.modelConfig.apiKey;
 
   return (
-    <div className="min-h-screen flex flex-col font-sans bg-white dark:bg-black text-gray-900 dark:text-gray-100 selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black">
+    <div className="min-h-screen flex flex-col font-sans bg-white dark:bg-black text-gray-900 dark:text-gray-100 selection:bg-brand selection:text-white dark:selection:bg-brand dark:selection:text-white">
       <header className="h-16 border-b border-gray-100 dark:border-gray-900 bg-white/80 dark:bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div className="w-full max-w-4xl mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-black dark:bg-white rounded-[6px] flex items-center justify-center shadow-lg shadow-black/20">
-              <Command size={18} className="text-white dark:text-black" />
-            </div>
+            <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-[6px] shadow-lg shadow-brand/20" />
             <span className="text-lg font-bold tracking-tight">爆款文生成器</span>
           </div>
           <div className="flex items-center gap-4">
-             <div className="hidden md:flex items-center gap-2 mr-2 text-xs font-medium text-gray-500 bg-gray-100 dark:bg-gray-900 px-3 py-1.5 rounded-full">
-               <span className={`w-2 h-2 rounded-full ${state.isGenerating ? 'bg-yellow-400 animate-pulse' : isConfigured ? 'bg-green-500' : 'bg-red-500'}`}></span>
-               {state.isGenerating ? 'AI 思考中...' : isConfigured ? '系统就绪' : '未配置模型'}
-             </div>
-            <button 
+            <div className="hidden md:flex items-center gap-2 mr-2 text-xs font-medium text-gray-500 bg-gray-100 dark:bg-gray-900 px-3 py-1.5 rounded-full">
+              <span className={`w-2 h-2 rounded-full ${state.isGenerating ? 'bg-yellow-400 animate-pulse' : isConfigured ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              {state.isGenerating ? 'AI 思考中...' : isConfigured ? '系统就绪' : '未配置模型'}
+            </div>
+            <button
               onClick={toggleTheme}
               className="p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-900"
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <Button 
-              variant="secondary" 
+            <Button
+              variant="secondary"
               className={`h-9 text-xs relative ${!isConfigured ? 'border-red-400 text-red-500 animate-pulse' : ''}`}
               onClick={openConfig}
             >
@@ -166,69 +164,69 @@ const AppContent: React.FC = () => {
       </header>
 
       <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-12">
-          <PlatformSelector 
-            selectedPlatforms={state.selectedPlatforms} 
-            onTogglePlatform={togglePlatform} 
-          />
-          <InputSection 
-            keywords={state.keywords}
-            setKeywords={(val) => setState(prev => ({ ...prev, keywords: val }))}
-            images={state.images}
-            setImages={(val) => setState(prev => ({ ...prev, images: val }))}
-            style={state.selectedStyle}
-            setStyle={(val) => setState(prev => ({ ...prev, selectedStyle: val }))}
-            settings={state.settings}
-            setSettings={(val) => setState(prev => ({ ...prev, settings: val }))}
-          />
+        <PlatformSelector
+          selectedPlatforms={state.selectedPlatforms}
+          onTogglePlatform={togglePlatform}
+        />
+        <InputSection
+          keywords={state.keywords}
+          setKeywords={(val) => setState(prev => ({ ...prev, keywords: val }))}
+          images={state.images}
+          setImages={(val) => setState(prev => ({ ...prev, images: val }))}
+          style={state.selectedStyle}
+          setStyle={(val) => setState(prev => ({ ...prev, selectedStyle: val }))}
+          settings={state.settings}
+          setSettings={(val) => setState(prev => ({ ...prev, settings: val }))}
+        />
 
-          <div className="flex items-center justify-between mb-12 p-1">
-             <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-md border border-gray-200 dark:border-gray-800">
-                  <Layers size={14} className="text-gray-500 ml-2" />
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mr-2">生成数量:</span>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4].map(num => (
-                      <button
-                        key={num}
-                        onClick={() => setState(prev => ({ ...prev, variantCount: num }))}
-                        className={`
+        <div className="flex items-center justify-between mb-12 p-1">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 p-1.5 rounded-md border border-gray-200 dark:border-gray-800">
+              <Layers size={14} className="text-gray-500 ml-2" />
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400 mr-2">生成数量:</span>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4].map(num => (
+                  <button
+                    key={num}
+                    onClick={() => setState(prev => ({ ...prev, variantCount: num }))}
+                    className={`
                           w-6 h-6 text-xs font-medium rounded-[4px] transition-all
-                          ${state.variantCount === num 
-                            ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' 
-                            : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800'}
+                          ${state.variantCount === num
+                        ? 'bg-brand text-white dark:bg-brand dark:text-white shadow-sm'
+                        : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800'}
                         `}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-             </div>
-
-             <Button 
-              onClick={handleGenerate} 
-              disabled={state.isGenerating || (!state.keywords && state.images.length === 0)} 
-              isLoading={state.isGenerating}
-              className="w-48 h-12 text-base shadow-xl shadow-black/10 dark:shadow-white/5 hover:shadow-2xl hover:-translate-y-0.5 transition-all"
-            >
-              <Sparkles size={18} />
-              开始生成
-            </Button>
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {(hasResults || state.isGenerating) && (
-             <OutputSection 
-               results={state.generatedCopies} 
-               selectedPlatforms={state.selectedPlatforms}
-             />
-          )}
-          
-          {!hasResults && !state.isGenerating && (
-            <div className="text-center py-20 opacity-30">
-               <ArrowDown size={32} className="mx-auto mb-4 animate-bounce" />
-               <p className="text-sm font-medium">填写内容并选择平台后开始生成</p>
-            </div>
-          )}
+          <Button
+            onClick={handleGenerate}
+            disabled={state.isGenerating || (!state.keywords && state.images.length === 0)}
+            isLoading={state.isGenerating}
+            className="w-48 h-12 text-base shadow-xl shadow-black/10 dark:shadow-white/5 hover:shadow-2xl hover:-translate-y-0.5 transition-all"
+          >
+            <Sparkles size={18} />
+            开始生成
+          </Button>
+        </div>
+
+        {(hasResults || state.isGenerating) && (
+          <OutputSection
+            results={state.generatedCopies}
+            selectedPlatforms={state.selectedPlatforms}
+          />
+        )}
+
+        {!hasResults && !state.isGenerating && (
+          <div className="text-center py-20 opacity-30">
+            <ArrowDown size={32} className="mx-auto mb-4 animate-bounce" />
+            <p className="text-sm font-medium">填写内容并选择平台后开始生成</p>
+          </div>
+        )}
       </main>
 
       {/* Model Config Modal */}
@@ -237,14 +235,14 @@ const AppContent: React.FC = () => {
           <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-md p-6 shadow-2xl border border-gray-100 dark:border-gray-800 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold">模型配置</h3>
-              <button 
+              <button
                 onClick={() => setShowConfigModal(false)}
                 className="p-1 text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               {/* Provider Selection */}
               <div className="space-y-2">
@@ -252,26 +250,24 @@ const AppContent: React.FC = () => {
                   <Server size={12} /> 模型服务商
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                   <button 
-                     onClick={() => setTempConfig({...tempConfig, provider: 'gemini', modelId: 'gemini-2.5-flash', baseUrl: ''})}
-                     className={`px-3 py-2 rounded-md text-sm font-medium border transition-all ${
-                       tempConfig.provider === 'gemini' 
-                       ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white' 
-                       : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:border-gray-800'
-                     }`}
-                   >
-                     Google Gemini
-                   </button>
-                   <button 
-                     onClick={() => setTempConfig({...tempConfig, provider: 'volcano', modelId: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3'})}
-                     className={`px-3 py-2 rounded-md text-sm font-medium border transition-all ${
-                       tempConfig.provider === 'volcano' 
-                       ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white' 
-                       : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:border-gray-800'
-                     }`}
-                   >
-                     火山引擎 (Doubao)
-                   </button>
+                  <button
+                    onClick={() => setTempConfig({ ...tempConfig, provider: 'gemini', modelId: 'gemini-2.5-flash', baseUrl: '' })}
+                    className={`px-3 py-2 rounded-md text-sm font-medium border transition-all ${tempConfig.provider === 'gemini'
+                      ? 'bg-brand text-white border-brand dark:bg-brand dark:text-white dark:border-brand'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:border-gray-800'
+                      }`}
+                  >
+                    Google Gemini
+                  </button>
+                  <button
+                    onClick={() => setTempConfig({ ...tempConfig, provider: 'volcano', modelId: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' })}
+                    className={`px-3 py-2 rounded-md text-sm font-medium border transition-all ${tempConfig.provider === 'volcano'
+                      ? 'bg-brand text-white border-brand dark:bg-brand dark:text-white dark:border-brand'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:border-gray-800'
+                      }`}
+                  >
+                    火山引擎 (Doubao)
+                  </button>
                 </div>
               </div>
 
@@ -287,12 +283,12 @@ const AppContent: React.FC = () => {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
                   <Type size={12} /> 模型别名
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={tempConfig.modelName}
-                  onChange={(e) => setTempConfig({...tempConfig, modelName: e.target.value})}
+                  onChange={(e) => setTempConfig({ ...tempConfig, modelName: e.target.value })}
                   placeholder="例如: My Model"
-                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-black dark:focus:ring-white outline-none text-sm"
+                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-brand dark:focus:ring-brand outline-none text-sm"
                 />
               </div>
 
@@ -301,12 +297,12 @@ const AppContent: React.FC = () => {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
                   <Box size={12} /> {tempConfig.provider === 'volcano' ? 'Endpoint ID (接入点 ID)' : 'Model ID'}
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={tempConfig.modelId}
-                  onChange={(e) => setTempConfig({...tempConfig, modelId: e.target.value})}
+                  onChange={(e) => setTempConfig({ ...tempConfig, modelId: e.target.value })}
                   placeholder={tempConfig.provider === 'volcano' ? "ep-2024..." : "gemini-2.5-flash"}
-                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-black dark:focus:ring-white outline-none text-sm font-mono"
+                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-brand dark:focus:ring-brand outline-none text-sm font-mono"
                 />
               </div>
 
@@ -315,12 +311,12 @@ const AppContent: React.FC = () => {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
                   <Key size={12} /> API Key <span className="text-red-500">*</span>
                 </label>
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   value={tempConfig.apiKey}
-                  onChange={(e) => setTempConfig({...tempConfig, apiKey: e.target.value})}
+                  onChange={(e) => setTempConfig({ ...tempConfig, apiKey: e.target.value })}
                   placeholder="sk-..."
-                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-black dark:focus:ring-white outline-none text-sm font-mono"
+                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-brand dark:focus:ring-brand outline-none text-sm font-mono"
                 />
               </div>
 
@@ -329,12 +325,12 @@ const AppContent: React.FC = () => {
                 <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1">
                   <Link size={12} /> Base URL
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={tempConfig.baseUrl}
-                  onChange={(e) => setTempConfig({...tempConfig, baseUrl: e.target.value})}
+                  onChange={(e) => setTempConfig({ ...tempConfig, baseUrl: e.target.value })}
                   placeholder={tempConfig.provider === 'volcano' ? "https://ark.cn-beijing.volces.com/api/v3" : "https://generativelanguage.googleapis.com"}
-                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-black dark:focus:ring-white outline-none text-sm font-mono"
+                  className="w-full px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 focus:ring-1 focus:ring-brand dark:focus:ring-brand outline-none text-sm font-mono"
                 />
               </div>
             </div>

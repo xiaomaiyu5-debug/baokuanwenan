@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { PlatformId, ToneStyle, GenerationSettings, ModelConfig } from "../types";
+import { PLATFORM_CONFIG } from "../constants";
 
 // Gemini Schema
 const responseSchema: Schema = {
@@ -64,44 +65,68 @@ const generateGeminiCopy = async (
   variantCount: number,
   modelConfig: ModelConfig
 ) => {
-  const ai = new GoogleGenAI(modelConfig.apiKey);
-  const model = ai.getGenerativeModel({ model: modelConfig.modelId || 'gemini-2.5-flash' });
+  const ai = new GoogleGenAI({ apiKey: modelConfig.apiKey });
 
-  const systemPrompt = buildSystemPrompt(style, settings, variantCount);
-  const userPrompt = buildUserPrompt(platforms, keywords, variantCount, images);
+  const generationPromises = platforms.map(platformId => {
+    const persona = PLATFORM_CONFIG[platformId].persona;
+    const systemPrompt = buildPlatformSystemPrompt(style, settings, variantCount, persona);
+    const userPrompt = buildUserPrompt([platformId], keywords, variantCount, images);
 
-  const parts: any[] = [];
-  if (images && images.length > 0) {
-    images.forEach(img => {
-      const matches = img.match(/^data:(.+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        parts.push({ inlineData: { mimeType: matches[1], data: matches[2] } });
-      }
-    });
-  }
-  parts.push({ text: userPrompt });
+    const parts: any[] = [];
+    if (images && images.length > 0) {
+      images.forEach(img => {
+        const matches = img.match(/^data:(.+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          parts.push({ inlineData: { mimeType: matches[1], data: matches[2] } });
+        }
+      });
+    }
+    parts.push({ text: userPrompt });
 
-  const contents = [
-    { role: 'system', parts: [{ text: systemPrompt }] },
-    { role: 'user', parts: parts }
-  ];
+    const contents = [
+      { role: 'system', parts: [{ text: systemPrompt }] },
+      { role: 'user', parts: parts }
+    ];
 
-  try {
-    const result = await model.generateContent({ 
+    return ai.models.generateContent({
+      model: modelConfig.modelId || 'gemini-pro',
       contents: contents,
-      generationConfig: {
+      config: {
         responseMimeType: 'application/json',
         responseSchema: responseSchema,
         temperature: 0.7,
         topP: 0.85,
         maxOutputTokens: 8192,
       }
+    }).catch(error => {
+      console.error(`Gemini API Error for platform ${platformId}:`, error);
+      return null;
     });
-    const response = result.response;
-    const responseText = response.text();
-    return responseText ? JSON.parse(responseText) : null;
+  });
+
+  try {
+    const results = await Promise.all(generationPromises);
+    const combinedResults = { results: [] as any[] };
+
+    results.forEach(result => {
+      if (result) {
+        const responseText = result.text;
+        if (responseText) {
+          try {
+            const parsedJson = JSON.parse(responseText);
+            if (parsedJson.results && Array.isArray(parsedJson.results)) {
+              combinedResults.results.push(...parsedJson.results);
+            }
+          } catch (e) {
+            console.error("Failed to parse JSON from Gemini API:", e);
+          }
+        }
+      }
+    });
+
+    return combinedResults;
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error("Error processing Gemini API calls in parallel:", error);
     throw error;
   }
 };
@@ -116,86 +141,108 @@ const generateVolcanoCopy = async (
   variantCount: number,
   modelConfig: ModelConfig
 ) => {
-  // Volcano defaults to a specific endpoint if not provided, usually: https://ark.cn-beijing.volces.com/api/v3
   const baseUrl = modelConfig.baseUrl || "https://ark.cn-beijing.volces.com/api/v3";
   const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
-  
-  const systemPrompt = buildSystemPrompt(style, settings, variantCount) + `
-    \n\nIMPORTANT: You MUST output strictly valid JSON matching this structure, do not include markdown code fences:
-    {
-      "results": [
-        {
-          "platformId": "PLATFORM_ENUM",
-          "versions": [
-            { "content": "text...", "tags": ["tag1"], "engagementScore": "90/100" }
-          ]
-        }
-      ]
-    }
-  `;
 
-  const userPrompt = buildUserPrompt(platforms, keywords, variantCount, images);
+  const generationPromises = platforms.map(async (platformId) => {
+    const persona = PLATFORM_CONFIG[platformId].persona;
+    const systemPrompt = buildPlatformSystemPrompt(style, settings, variantCount, persona) + `
+      IMPORTANT: You MUST output strictly valid JSON matching this structure, do not include markdown code fences:
+      {
+        "results": [
+          {
+            "platformId": "${platformId}",
+            "versions": [
+              { "content": "text...", "tags": ["tag1"], "engagementScore": "90/100" }
+            ]
+          }
+        ]
+      }
+    `;
 
-  const messages: any[] = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: [] } // Content array for multimodal
-  ];
+    const userPrompt = buildUserPrompt([platformId], keywords, variantCount, images);
 
-  // Add Text
-  messages[1].content.push({ type: "text", text: userPrompt });
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: [] } // Content array for multimodal
+    ];
 
-  // Add Images (OpenAI format)
-  if (images && images.length > 0) {
-    images.forEach(img => {
-      messages[1].content.push({
-        type: "image_url",
-        image_url: { url: img }
+    messages[1].content.push({ type: "text", text: userPrompt });
+
+    if (images && images.length > 0) {
+      images.forEach(img => {
+        messages[1].content.push({
+          type: "image_url",
+          image_url: { url: img }
+        });
       });
-    });
-  }
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${modelConfig.apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelConfig.modelId,
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 4096,
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`Volcano API Error for platform ${platformId}: ${response.status} - ${errText}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const contentStr = data.choices?.[0]?.message?.content;
+
+      if (!contentStr) {
+        console.error(`No content received from Volcano API for platform ${platformId}`);
+        return null;
+      }
+
+      const cleanedJson = contentStr.replace(/```json\n?|```/g, '').trim();
+      return JSON.parse(cleanedJson);
+
+    } catch (error) {
+      console.error(`Error fetching from Volcano API for platform ${platformId}:`, error);
+      return null;
+    }
+  });
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${modelConfig.apiKey}`
-      },
-      body: JSON.stringify({
-        model: modelConfig.modelId, // This is the Endpoint ID for Volcano
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 4096, 
-      })
+    const results = await Promise.all(generationPromises);
+    const combinedResults = { results: [] as any[] };
+
+    results.forEach(result => {
+      if (result && result.results && Array.isArray(result.results)) {
+        combinedResults.results.push(...result.results);
+      }
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Volcano API Error: ${response.status} - ${errText}`);
-    }
-
-    const data = await response.json();
-    const contentStr = data.choices?.[0]?.message?.content;
-
-    if (!contentStr) throw new Error("No content received from Volcano API");
-
-    // Clean markdown fences if present
-    const cleanedJson = contentStr.replace(/```json\n?|```/g, '').trim();
-    return JSON.parse(cleanedJson);
-
+    return combinedResults;
   } catch (error) {
-    console.error("Volcano API Error:", error);
+    console.error("Error processing Volcano API calls in parallel:", error);
     throw error;
   }
 };
 
 // Shared Prompt Builders
-const buildSystemPrompt = (style: ToneStyle, settings: GenerationSettings, variantCount: number) => `
+const buildPlatformSystemPrompt = (style: ToneStyle, settings: GenerationSettings, variantCount: number, persona: string) => `
     **核心指令：你必须只使用简体中文进行回复。**
 
     你是一位专业的病毒式文案写作总监 (Gemini3)。
-    请严格遵守以下针对所选平台的规则，生成社交媒体文案。
-    
+    你的任务是为特定社交媒体平台生成文案。
+
+    **人设 (Persona):**
+    ${persona}
+
     **风格:** ${style}
     **设置:**
     - 表情符号使用: ${settings.useEmoji ? '使用相关表情' : '最少/不使用'}

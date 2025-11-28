@@ -61,7 +61,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
   return (
     <section className="space-y-4 mb-8">
        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-        <span className="w-1 h-4 bg-black dark:bg-white rounded-full"></span>
+        <span className="w-1 h-4 bg-brand rounded-full"></span>
         核心内容
       </h2>
       
@@ -76,7 +76,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
                 className={`
                   px-3 py-1.5 rounded text-xs font-medium transition-colors
                   ${style === s 
-                    ? 'bg-black text-white dark:bg-white dark:text-black' 
+                    ? 'bg-brand text-white' 
                     : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900'}
                 `}
               >
@@ -191,7 +191,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
               step="1"
               value={settings.tagCount}
               onChange={(e) => setSettings({...settings, tagCount: parseInt(e.target.value)})}
-              className="w-16 accent-black dark:accent-white h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+              className="w-16 accent-brand h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
             />
             <span className="text-xs font-medium w-3">{settings.tagCount}</span>
           </div>
